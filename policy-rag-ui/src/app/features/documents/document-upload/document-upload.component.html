@@ -1,0 +1,90 @@
+<div class="upload-container">
+  <div
+    class="upload-zone"
+    [class.drag-over]="isDragOver()"
+    (dragover)="onDragOver($event)"
+    (dragleave)="onDragLeave($event)"
+    (drop)="onDrop($event)">
+
+    @if (!isUploading()) {
+      <div class="upload-content">
+        <div class="upload-icon">📄</div>
+        <h3>Upload Policy Documents</h3>
+        <p>Drag and drop files here or click to browse</p>
+        <p class="file-types">Supported: PDF, DOCX, TXT (Max 50MB)</p>
+
+        <input
+          type="file"
+          #fileInput
+          multiple
+          accept=".pdf,.docx,.txt"
+          (change)="onFileSelected($event)"
+          class="file-input"
+          id="file-upload">
+
+        <label for="file-upload" class="browse-btn">
+          Browse Files
+        </label>
+      </div>
+    } @else {
+      <div class="upload-progress">
+        <div class="progress-info">
+          <span class="progress-label">Uploading...</span>
+          <span class="progress-percent">{{ uploadProgress() }}%</span>
+        </div>
+
+        <div class="progress-bar">
+          <div
+            class="progress-fill"
+            [style.width.%]="uploadProgress()"></div>
+        </div>
+      </div>
+    }
+  </div>
+
+  @if (uploadResults().length > 0) {
+    <div class="upload-results">
+      <div class="results-header">
+        <h4>Upload Results</h4>
+        <button
+          class="clear-results-btn"
+          (click)="clearResults()">
+          Clear
+        </button>
+      </div>
+
+      <div class="results-list">
+        @for (result of uploadResults(); track result.fileName) {
+          <div
+            class="result-item"
+            [class.success]="result.success"
+            [class.error]="!result.success">
+
+            <div class="result-icon">
+              @if (result.success) {
+                <span class="icon">✓</span>
+              } @else {
+                <span class="icon">✗</span>
+              }
+            </div>
+
+            <div class="result-info">
+              <div class="result-filename">{{ result.fileName }}</div>
+
+              @if (result.success) {
+                <div class="result-details">
+                  Successfully uploaded
+                  @if (result.chunkCount) {
+                    <span> - {{ result.chunkCount }} chunks created</span>
+                  }
+                </div>
+              } @else {
+                <div class="result-error">{{ result.error }}</div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>

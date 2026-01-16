@@ -1,0 +1,123 @@
+<div class="chat-container">
+  <!-- Header with department filter -->
+  <div class="chat-header">
+    <div class="header-content">
+      <h1>Policy Assistant</h1>
+      <p class="subtitle">Ask questions about company policies</p>
+    </div>
+
+    <div class="header-controls">
+      <div class="department-filter">
+        <label for="department">Department:</label>
+        <select
+          id="department"
+          [(ngModel)]="selectedDepartment"
+          class="department-select">
+          @for (dept of departments; track dept) {
+            <option [value]="dept">{{ dept }}</option>
+          }
+        </select>
+      </div>
+
+      <button
+        class="clear-btn"
+        (click)="clearChat()"
+        [disabled]="messages().length === 0"
+        title="Clear conversation">
+        Clear Chat
+      </button>
+    </div>
+  </div>
+
+  <!-- Message list -->
+  <div class="message-list" #messageContainer>
+    @if (messages().length === 0) {
+      <div class="welcome-message">
+        <div class="welcome-icon">💬</div>
+        <h2>Welcome to Policy Assistant</h2>
+        <p>Ask me anything about company policies and I'll provide answers based on our policy documents.</p>
+        <div class="example-questions">
+          <p><strong>Example questions:</strong></p>
+          <ul>
+            <li>What is the remote work policy?</li>
+            <li>How many vacation days do I get?</li>
+            <li>What is the expense reimbursement process?</li>
+          </ul>
+        </div>
+      </div>
+    }
+
+    @for (message of messages(); track message.id) {
+      <div class="message" [class.user-message]="message.role === 'user'" [class.assistant-message]="message.role === 'assistant'">
+        <div class="message-avatar">
+          @if (message.role === 'user') {
+            <span class="avatar-icon">👤</span>
+          } @else {
+            <span class="avatar-icon">🤖</span>
+          }
+        </div>
+
+        <div class="message-content">
+          <div class="message-header">
+            <span class="message-role">{{ message.role === 'user' ? 'You' : 'Assistant' }}</span>
+            <span class="message-time">{{ message.timestamp | date:'short' }}</span>
+          </div>
+
+          <div class="message-text" [class.streaming]="message.isStreaming">
+            {{ message.content }}
+            @if (message.isStreaming) {
+              <span class="cursor">▊</span>
+            }
+          </div>
+
+          @if (message.sources && message.sources.length > 0) {
+            <div class="message-sources">
+              <p class="sources-title">Sources:</p>
+              <div class="sources-list">
+                @for (source of message.sources; track source.index) {
+                  <div class="source-item">
+                    <span class="source-number">[{{ source.index }}]</span>
+                    <span class="source-info">
+                      <strong>{{ source.documentTitle }}</strong> - Page {{ source.pageNumber }}
+                      @if (source.section) {
+                        <span class="source-section"> ({{ source.section }})</span>
+                      }
+                    </span>
+                    <span class="source-score">{{ (source.score * 100).toFixed(0) }}% match</span>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- Input area -->
+  <div class="chat-input">
+    <div class="input-wrapper">
+      <textarea
+        [(ngModel)]="userInput"
+        (keypress)="onKeyPress($event)"
+        [disabled]="isLoading()"
+        placeholder="Ask a question about policies..."
+        class="message-input"
+        rows="1"></textarea>
+
+      <button
+        class="send-btn"
+        (click)="sendMessage()"
+        [disabled]="!userInput().trim() || isLoading()"
+        title="Send message">
+        @if (isLoading()) {
+          <span class="loading-spinner"></span>
+        } @else {
+          <span>Send ↑</span>
+        }
+      </button>
+    </div>
+
+    <p class="input-hint">Press Enter to send, Shift+Enter for new line</p>
+  </div>
+</div>

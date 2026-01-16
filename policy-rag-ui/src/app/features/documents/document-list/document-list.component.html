@@ -1,0 +1,104 @@
+<div class="document-list-container">
+  <div class="list-header">
+    <h2>Policy Documents</h2>
+    <button class="refresh-btn" (click)="loadDocuments()" [disabled]="isLoading()">
+      <span [class.spinning]="isLoading()">↻</span> Refresh
+    </button>
+  </div>
+
+  @if (isLoading() && documents().length === 0) {
+    <div class="loading-state">
+      <div class="loading-spinner"></div>
+      <p>Loading documents...</p>
+    </div>
+  } @else if (documents().length === 0) {
+    <div class="empty-state">
+      <div class="empty-icon">📁</div>
+      <h3>No documents yet</h3>
+      <p>Upload your first policy document to get started.</p>
+    </div>
+  } @else {
+    <div class="documents-table">
+      <table>
+        <thead>
+          <tr>
+            <th>File Name</th>
+            <th>Upload Date</th>
+            <th>Size</th>
+            <th>Pages</th>
+            <th>Chunks</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (doc of documents(); track doc.id) {
+            <tr>
+              <td class="file-name">
+                <span class="file-icon">📄</span>
+                <span class="name-text">{{ doc.fileName }}</span>
+              </td>
+              <td>{{ doc.uploadDate | date:'short' }}</td>
+              <td>{{ formatFileSize(doc.fileSize) }}</td>
+              <td>{{ doc.pageCount }}</td>
+              <td>{{ doc.chunkCount }}</td>
+              <td>
+                <span
+                  class="status-badge"
+                  [ngClass]="getStatusClass(doc.status)">
+                  {{ getStatusLabel(doc.status) }}
+                </span>
+              </td>
+              <td class="actions">
+                <button
+                  class="action-btn reprocess-btn"
+                  (click)="reprocessDocument(doc.id)"
+                  [disabled]="deletingDocumentId() === doc.id"
+                  title="Reprocess document">
+                  🔄
+                </button>
+                <button
+                  class="action-btn delete-btn"
+                  (click)="deleteDocument(doc.id, doc.fileName)"
+                  [disabled]="deletingDocumentId() === doc.id"
+                  title="Delete document">
+                  @if (deletingDocumentId() === doc.id) {
+                    <span class="mini-spinner"></span>
+                  } @else {
+                    🗑️
+                  }
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination">
+      <div class="pagination-info">
+        Showing {{ (currentPage() - 1) * pageSize() + 1 }} -
+        {{ Math.min(currentPage() * pageSize(), totalCount()) }} of {{ totalCount() }}
+      </div>
+
+      <div class="pagination-controls">
+        <button
+          class="page-btn"
+          (click)="previousPage()"
+          [disabled]="!hasPreviousPage()">
+          ← Previous
+        </button>
+
+        <span class="page-number">Page {{ currentPage() }}</span>
+
+        <button
+          class="page-btn"
+          (click)="nextPage()"
+          [disabled]="!hasNextPage()">
+          Next →
+        </button>
+      </div>
+    </div>
+  }
+</div>
