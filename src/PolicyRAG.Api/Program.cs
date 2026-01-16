@@ -67,6 +67,9 @@ try
     // Register vector store service
     builder.Services.AddSingleton<IVectorStoreService, QdrantVectorStoreService>();
 
+    // Register retrieval service
+    builder.Services.AddSingleton<RetrievalService>();
+
     var app = builder.Build();
 
     // Configure the HTTP request pipeline.
