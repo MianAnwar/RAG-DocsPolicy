@@ -74,6 +74,10 @@ try
     builder.Services.AddSingleton<IPromptBuilder, PromptBuilder>();
     builder.Services.AddSingleton<IChatCompletionService, OpenAIChatCompletionService>();
 
+    // Register document repository and ingestion service
+    builder.Services.AddSingleton<IDocumentRepository, InMemoryDocumentRepository>();
+    builder.Services.AddSingleton<IDocumentIngestionService, DocumentIngestionService>();
+
     var app = builder.Build();
 
     // Configure the HTTP request pipeline.
