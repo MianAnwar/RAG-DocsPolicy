@@ -61,6 +61,9 @@ try
     builder.Services.AddSingleton<ITokenizer, TiktokenTokenizer>();
     builder.Services.AddSingleton<ChunkingService>();
 
+    // Register embedding service
+    builder.Services.AddSingleton<IEmbeddingService, OpenAIEmbeddingService>();
+
     var app = builder.Build();
 
     // Configure the HTTP request pipeline.
