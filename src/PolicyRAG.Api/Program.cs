@@ -1,4 +1,7 @@
 using PolicyRAG.Api.Configuration;
+using PolicyRAG.Api.Interfaces;
+using PolicyRAG.Api.Services;
+using PolicyRAG.Api.Services.Parsers;
 using Serilog;
 
 // Configure Serilog
@@ -48,6 +51,11 @@ try
     {
         options.MultipartBodyLengthLimit = 52428800; // 50MB
     });
+
+    // Register document parsers
+    builder.Services.AddSingleton<IDocumentParser, PdfDocumentParser>();
+    builder.Services.AddSingleton<IDocumentParser, DocxDocumentParser>();
+    builder.Services.AddSingleton<DocumentParserFactory>();
 
     var app = builder.Build();
 
