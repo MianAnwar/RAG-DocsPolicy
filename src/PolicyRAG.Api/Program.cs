@@ -57,6 +57,10 @@ try
     builder.Services.AddSingleton<IDocumentParser, DocxDocumentParser>();
     builder.Services.AddSingleton<DocumentParserFactory>();
 
+    // Register tokenizer and chunking service
+    builder.Services.AddSingleton<ITokenizer, TiktokenTokenizer>();
+    builder.Services.AddSingleton<ChunkingService>();
+
     var app = builder.Build();
 
     // Configure the HTTP request pipeline.
