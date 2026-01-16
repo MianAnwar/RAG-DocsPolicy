@@ -70,6 +70,10 @@ try
     // Register retrieval service
     builder.Services.AddSingleton<RetrievalService>();
 
+    // Register prompt builder and chat completion services
+    builder.Services.AddSingleton<IPromptBuilder, PromptBuilder>();
+    builder.Services.AddSingleton<IChatCompletionService, OpenAIChatCompletionService>();
+
     var app = builder.Build();
 
     // Configure the HTTP request pipeline.
