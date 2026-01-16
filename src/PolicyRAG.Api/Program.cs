@@ -64,6 +64,9 @@ try
     // Register embedding service
     builder.Services.AddSingleton<IEmbeddingService, OpenAIEmbeddingService>();
 
+    // Register vector store service
+    builder.Services.AddSingleton<IVectorStoreService, QdrantVectorStoreService>();
+
     var app = builder.Build();
 
     // Configure the HTTP request pipeline.
