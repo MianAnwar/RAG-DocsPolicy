@@ -1,0 +1,53 @@
+# .NET
+bin/
+obj/
+*.user
+*.userosscache
+*.suo
+*.log
+*.vspscc
+*.pdb
+.vs/
+*.nupkg
+project.lock.json
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Angular
+node_modules/
+dist/
+.angular/
+.sass-cache/
+*.css.map
+*.js.map
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment files with secrets
+appsettings.*.local.json
+*.local.json
+.env
+.env.local
+.env.*.local
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+logs/
+*.log
+
+# Test results
+TestResults/
+coverage/
