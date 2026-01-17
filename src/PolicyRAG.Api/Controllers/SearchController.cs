@@ -6,9 +6,6 @@ using PolicyRAG.Api.Services;
 
 namespace PolicyRAG.Api.Controllers;
 
-/// <summary>
-/// Controller for direct vector search operations
-/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class SearchController : ControllerBase
@@ -24,11 +21,6 @@ public class SearchController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>
-    /// Search for relevant document chunks without generating an answer
-    /// </summary>
-    /// <param name="request">Search request with query and filters</param>
-    /// <returns>Search results with matching document chunks</returns>
     [HttpPost]
     [ProducesResponseType(typeof(SearchResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

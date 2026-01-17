@@ -5,9 +5,6 @@ using PolicyRAG.Api.Models.Responses;
 
 namespace PolicyRAG.Api.Controllers;
 
-/// <summary>
-/// Controller for document management operations
-/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class DocumentsController : ControllerBase
@@ -26,12 +23,6 @@ public class DocumentsController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>
-    /// Upload one or more documents for ingestion
-    /// </summary>
-    /// <param name="files">Files to upload</param>
-    /// <param name="department">Department to associate with the documents</param>
-    /// <returns>Upload results for each file</returns>
     [HttpPost("upload")]
     [RequestSizeLimit(50_000_000)] // 50MB limit
     [ProducesResponseType(typeof(List<DocumentUploadResult>), StatusCodes.Status200OK)]
@@ -100,12 +91,6 @@ public class DocumentsController : ControllerBase
         return Ok(results);
     }
 
-    /// <summary>
-    /// Get paginated list of documents
-    /// </summary>
-    /// <param name="page">Page number (1-based)</param>
-    /// <param name="pageSize">Number of documents per page</param>
-    /// <returns>Paginated document list</returns>
     [HttpGet]
     [ProducesResponseType(typeof(DocumentListResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDocuments(
@@ -133,11 +118,6 @@ public class DocumentsController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Get a specific document by ID
-    /// </summary>
-    /// <param name="id">Document ID</param>
-    /// <returns>Document information</returns>
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(DocumentInfo), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -153,11 +133,6 @@ public class DocumentsController : ControllerBase
         return Ok(document);
     }
 
-    /// <summary>
-    /// Delete a document and all its chunks
-    /// </summary>
-    /// <param name="id">Document ID</param>
-    /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -175,11 +150,6 @@ public class DocumentsController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>
-    /// Reprocess an existing document
-    /// </summary>
-    /// <param name="id">Document ID</param>
-    /// <returns>Accepted status</returns>
     [HttpPost("{id}/reprocess")]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

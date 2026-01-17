@@ -8,9 +8,6 @@ using System.Text.Json;
 
 namespace PolicyRAG.Api.Controllers;
 
-/// <summary>
-/// Controller for chat/question-answering operations
-/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class ChatController : ControllerBase
@@ -32,11 +29,6 @@ public class ChatController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>
-    /// Send a chat message and receive a complete response
-    /// </summary>
-    /// <param name="request">Chat request with message and optional filters</param>
-    /// <returns>Complete chat response with answer and sources</returns>
     [HttpPost]
     [ProducesResponseType(typeof(ChatResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -120,12 +112,6 @@ public class ChatController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Send a chat message and receive a streaming response
-    /// </summary>
-    /// <param name="message">The user's question</param>
-    /// <param name="department">Optional department filter</param>
-    /// <returns>Server-Sent Events stream with response chunks</returns>
     [HttpGet("stream")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
