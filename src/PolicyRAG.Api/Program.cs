@@ -1,5 +1,7 @@
 using PolicyRAG.Api.Configuration;
+using PolicyRAG.Api.HealthChecks;
 using PolicyRAG.Api.Interfaces;
+using PolicyRAG.Api.Resilience;
 using PolicyRAG.Api.Services;
 using PolicyRAG.Api.Services.Parsers;
 using Serilog;
@@ -28,6 +30,12 @@ try
     builder.Services.Configure<OpenAIOptions>(builder.Configuration.GetSection(OpenAIOptions.SectionName));
     builder.Services.Configure<ChunkingOptions>(builder.Configuration.GetSection(ChunkingOptions.SectionName));
     builder.Services.Configure<RetrievalOptions>(builder.Configuration.GetSection(RetrievalOptions.SectionName));
+
+    // Add resilience policies (retry, circuit breaker, timeout)
+    builder.Services.AddResiliencePolicies(builder.Configuration);
+
+    // Add health checks
+    builder.Services.AddPolicyRagHealthChecks();
 
     // Add services to the container.
     builder.Services.AddControllers();
@@ -80,6 +88,29 @@ try
 
     var app = builder.Build();
 
+    // Configure graceful shutdown
+    var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+    lifetime.ApplicationStopping.Register(() =>
+    {
+        Log.Information("Application is shutting down...");
+        
+        // Mark as not ready to stop accepting new requests
+        var startupCheck = app.Services.GetService<StartupHealthCheck>();
+        if (startupCheck != null)
+        {
+            startupCheck.IsReady = false;
+        }
+        
+        // Give load balancers time to stop routing traffic
+        Thread.Sleep(TimeSpan.FromSeconds(5));
+        Log.Information("Graceful shutdown period complete");
+    });
+
+    lifetime.ApplicationStopped.Register(() =>
+    {
+        Log.Information("Application has stopped");
+    });
+
     // Configure the HTTP request pipeline.
     if (app.Environment.IsDevelopment())
     {
@@ -92,10 +123,16 @@ try
     
     app.MapControllers();
     
-    // Health check endpoint
-    app.MapGet("/health", () => Results.Ok(new { Status = "Healthy", Timestamp = DateTime.UtcNow }))
-        .WithName("HealthCheck")
-        .WithTags("Health");
+    // Map health check endpoints
+    app.MapPolicyRagHealthChecks();
+
+    // Mark startup as complete
+    var startupHealthCheck = app.Services.GetService<StartupHealthCheck>();
+    if (startupHealthCheck != null)
+    {
+        startupHealthCheck.IsReady = true;
+        Log.Information("Application startup complete - ready to accept requests");
+    }
 
     app.Run();
 }

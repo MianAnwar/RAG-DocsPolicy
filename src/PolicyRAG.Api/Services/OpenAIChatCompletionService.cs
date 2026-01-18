@@ -1,6 +1,8 @@
 using OpenAI.Chat;
 using PolicyRAG.Api.Interfaces;
 using PolicyRAG.Api.Models;
+using PolicyRAG.Api.Resilience;
+using Polly;
 using System.Runtime.CompilerServices;
 using System.Text;
 
@@ -13,11 +15,13 @@ public class OpenAIChatCompletionService : IChatCompletionService
 {
     private readonly ChatClient _chatClient;
     private readonly ILogger<OpenAIChatCompletionService> _logger;
+    private readonly ResiliencePipeline _resiliencePipeline;
     private readonly string _modelName;
 
     public OpenAIChatCompletionService(
         IConfiguration configuration,
-        ILogger<OpenAIChatCompletionService> logger)
+        ILogger<OpenAIChatCompletionService> logger,
+        OpenAIResiliencePipeline? resiliencePipeline = null)
     {
         var apiKey = configuration["OpenAI:ApiKey"] 
             ?? throw new InvalidOperationException("OpenAI API key not configured");
@@ -25,6 +29,7 @@ public class OpenAIChatCompletionService : IChatCompletionService
         _modelName = configuration["OpenAI:ChatModel"] ?? "gpt-4o";
         _chatClient = new ChatClient(_modelName, apiKey);
         _logger = logger;
+        _resiliencePipeline = resiliencePipeline?.Pipeline ?? ResiliencePipeline.Empty;
 
         _logger.LogInformation("Initialized OpenAI Chat Completion Service with model {Model}", _modelName);
     }
@@ -39,30 +44,53 @@ public class OpenAIChatCompletionService : IChatCompletionService
 
         try
         {
-            var messages = new List<ChatMessage>
+            return await _resiliencePipeline.ExecuteAsync(async ct =>
             {
-                new SystemChatMessage(systemPrompt),
-                new UserChatMessage(userMessage)
-            };
+                var messages = new List<ChatMessage>
+                {
+                    new SystemChatMessage(systemPrompt),
+                    new UserChatMessage(userMessage)
+                };
 
-            var completion = await _chatClient.CompleteChatAsync(
-                messages,
-                cancellationToken: cancellationToken);
+                var completion = await _chatClient.CompleteChatAsync(
+                    messages,
+                    cancellationToken: ct);
 
-            var response = completion.Value;
-            var answer = response.Content[0].Text;
-            
-            _logger.LogInformation(
-                "Generated answer with {InputTokens} input tokens, {OutputTokens} output tokens",
-                response.Usage.InputTokenCount,
-                response.Usage.OutputTokenCount);
+                var response = completion.Value;
+                var answer = response.Content[0].Text;
+                
+                _logger.LogInformation(
+                    "Generated answer with {InputTokens} input tokens, {OutputTokens} output tokens",
+                    response.Usage.InputTokenCount,
+                    response.Usage.OutputTokenCount);
 
+                return new ChatResponse
+                {
+                    Answer = answer,
+                    TokensUsed = response.Usage.TotalTokenCount,
+                    IsGrounded = !answer.Contains("I don't have enough information", StringComparison.OrdinalIgnoreCase) &&
+                                !answer.Contains("cannot answer", StringComparison.OrdinalIgnoreCase)
+                };
+            }, cancellationToken);
+        }
+        catch (Polly.CircuitBreaker.BrokenCircuitException)
+        {
+            _logger.LogError("OpenAI circuit breaker is open - service unavailable");
             return new ChatResponse
             {
-                Answer = answer,
-                TokensUsed = response.Usage.TotalTokenCount,
-                IsGrounded = !answer.Contains("I don't have enough information", StringComparison.OrdinalIgnoreCase) &&
-                            !answer.Contains("cannot answer", StringComparison.OrdinalIgnoreCase)
+                Answer = "I'm temporarily unable to process your request due to service issues. Please try again in a few moments.",
+                IsGrounded = false,
+                Warning = "Service temporarily unavailable"
+            };
+        }
+        catch (Polly.Timeout.TimeoutRejectedException)
+        {
+            _logger.LogError("OpenAI request timed out");
+            return new ChatResponse
+            {
+                Answer = "The request took too long to process. Please try again with a simpler question.",
+                IsGrounded = false,
+                Warning = "Request timed out"
             };
         }
         catch (Exception ex)
