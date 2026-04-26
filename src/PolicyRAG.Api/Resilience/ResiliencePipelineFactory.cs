@@ -25,13 +25,31 @@ public class ResiliencePipelineFactory
     public ResiliencePipeline CreateOpenAIPipeline(OpenAIResilienceOptions options)
     {
         return new ResiliencePipelineBuilder()
-            .AddTimeout(new TimeoutStrategyOptions
+            .AddCircuitBreaker(new CircuitBreakerStrategyOptions
             {
-                Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds),
-                OnTimeout = args =>
+                FailureRatio = 0.5,
+                MinimumThroughput = options.CircuitBreakerMinimumThroughput,
+                SamplingDuration = TimeSpan.FromSeconds(options.CircuitBreakerSamplingDurationSeconds),
+                BreakDuration = TimeSpan.FromSeconds(options.CircuitBreakerDurationSeconds),
+                ShouldHandle = new PredicateBuilder()
+                    .Handle<HttpRequestException>()
+                    .Handle<TaskCanceledException>(),
+                OnOpened = args =>
                 {
-                    _logger.LogWarning("OpenAI request timed out after {Timeout}s", 
-                        options.TimeoutSeconds);
+                    _logger.LogError(
+                        "OpenAI circuit breaker OPENED for {Duration}s due to: {Reason}",
+                        options.CircuitBreakerDurationSeconds,
+                        args.Outcome.Exception?.Message ?? "Multiple failures");
+                    return default;
+                },
+                OnClosed = args =>
+                {
+                    _logger.LogInformation("OpenAI circuit breaker CLOSED - service recovered");
+                    return default;
+                },
+                OnHalfOpened = args =>
+                {
+                    _logger.LogInformation("OpenAI circuit breaker HALF-OPEN - testing service");
                     return default;
                 }
             })
@@ -57,31 +75,13 @@ public class ResiliencePipelineFactory
                     return default;
                 }
             })
-            .AddCircuitBreaker(new CircuitBreakerStrategyOptions
+            .AddTimeout(new TimeoutStrategyOptions
             {
-                FailureRatio = 0.5,
-                MinimumThroughput = options.CircuitBreakerFailureThreshold,
-                SamplingDuration = TimeSpan.FromSeconds(options.CircuitBreakerSamplingDurationSeconds),
-                BreakDuration = TimeSpan.FromSeconds(options.CircuitBreakerDurationSeconds),
-                ShouldHandle = new PredicateBuilder()
-                    .Handle<HttpRequestException>()
-                    .Handle<TaskCanceledException>(),
-                OnOpened = args =>
+                Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds),
+                OnTimeout = args =>
                 {
-                    _logger.LogError(
-                        "OpenAI circuit breaker OPENED for {Duration}s due to: {Reason}",
-                        options.CircuitBreakerDurationSeconds,
-                        args.Outcome.Exception?.Message ?? "Multiple failures");
-                    return default;
-                },
-                OnClosed = args =>
-                {
-                    _logger.LogInformation("OpenAI circuit breaker CLOSED - service recovered");
-                    return default;
-                },
-                OnHalfOpened = args =>
-                {
-                    _logger.LogInformation("OpenAI circuit breaker HALF-OPEN - testing service");
+                    _logger.LogWarning("OpenAI request timed out after {Timeout}s", 
+                        options.TimeoutSeconds);
                     return default;
                 }
             })
@@ -94,13 +94,31 @@ public class ResiliencePipelineFactory
     public ResiliencePipeline CreateQdrantPipeline(QdrantResilienceOptions options)
     {
         return new ResiliencePipelineBuilder()
-            .AddTimeout(new TimeoutStrategyOptions
+            .AddCircuitBreaker(new CircuitBreakerStrategyOptions
             {
-                Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds),
-                OnTimeout = args =>
+                FailureRatio = 0.5,
+                MinimumThroughput = options.CircuitBreakerMinimumThroughput,
+                SamplingDuration = TimeSpan.FromSeconds(options.CircuitBreakerSamplingDurationSeconds),
+                BreakDuration = TimeSpan.FromSeconds(options.CircuitBreakerDurationSeconds),
+                ShouldHandle = new PredicateBuilder()
+                    .Handle<Grpc.Core.RpcException>()
+                    .Handle<HttpRequestException>(),
+                OnOpened = args =>
                 {
-                    _logger.LogWarning("Qdrant request timed out after {Timeout}s", 
-                        options.TimeoutSeconds);
+                    _logger.LogError(
+                        "Qdrant circuit breaker OPENED for {Duration}s due to: {Reason}",
+                        options.CircuitBreakerDurationSeconds,
+                        args.Outcome.Exception?.Message ?? "Multiple failures");
+                    return default;
+                },
+                OnClosed = args =>
+                {
+                    _logger.LogInformation("Qdrant circuit breaker CLOSED - service recovered");
+                    return default;
+                },
+                OnHalfOpened = args =>
+                {
+                    _logger.LogInformation("Qdrant circuit breaker HALF-OPEN - testing service");
                     return default;
                 }
             })
@@ -126,31 +144,13 @@ public class ResiliencePipelineFactory
                     return default;
                 }
             })
-            .AddCircuitBreaker(new CircuitBreakerStrategyOptions
+            .AddTimeout(new TimeoutStrategyOptions
             {
-                FailureRatio = 0.5,
-                MinimumThroughput = options.CircuitBreakerFailureThreshold,
-                SamplingDuration = TimeSpan.FromSeconds(options.CircuitBreakerSamplingDurationSeconds),
-                BreakDuration = TimeSpan.FromSeconds(options.CircuitBreakerDurationSeconds),
-                ShouldHandle = new PredicateBuilder()
-                    .Handle<Grpc.Core.RpcException>()
-                    .Handle<HttpRequestException>(),
-                OnOpened = args =>
+                Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds),
+                OnTimeout = args =>
                 {
-                    _logger.LogError(
-                        "Qdrant circuit breaker OPENED for {Duration}s due to: {Reason}",
-                        options.CircuitBreakerDurationSeconds,
-                        args.Outcome.Exception?.Message ?? "Multiple failures");
-                    return default;
-                },
-                OnClosed = args =>
-                {
-                    _logger.LogInformation("Qdrant circuit breaker CLOSED - service recovered");
-                    return default;
-                },
-                OnHalfOpened = args =>
-                {
-                    _logger.LogInformation("Qdrant circuit breaker HALF-OPEN - testing service");
+                    _logger.LogWarning("Qdrant request timed out after {Timeout}s", 
+                        options.TimeoutSeconds);
                     return default;
                 }
             })
@@ -163,7 +163,6 @@ public class ResiliencePipelineFactory
     public ResiliencePipeline CreateDefaultPipeline(ResilienceOptions options)
     {
         return new ResiliencePipelineBuilder()
-            .AddTimeout(TimeSpan.FromSeconds(options.TimeoutSeconds))
             .AddRetry(new RetryStrategyOptions
             {
                 MaxRetryAttempts = options.MaxRetryAttempts,
@@ -171,6 +170,7 @@ public class ResiliencePipelineFactory
                 Delay = TimeSpan.FromMilliseconds(options.BaseDelayMs),
                 MaxDelay = TimeSpan.FromMilliseconds(options.MaxDelayMs)
             })
+            .AddTimeout(TimeSpan.FromSeconds(options.TimeoutSeconds))
             .Build();
     }
 

@@ -223,7 +223,7 @@ The backend uses [Polly](https://github.com/App-vNext/Polly) resilience pipeline
 | `BaseDelayMs` | int | `1000` | Initial exponential backoff delay (ms) |
 | `MaxDelayMs` | int | `30000` | Maximum backoff delay cap (ms) |
 | `TimeoutSeconds` | int | `30` | Per-operation timeout |
-| `CircuitBreakerFailureThreshold` | int | `5` | Failures before the circuit breaker opens |
+| `CircuitBreakerMinimumThroughput` | int | `10` | Minimum actions in the sampling window before the failure ratio is evaluated |
 | `CircuitBreakerDurationSeconds` | int | `30` | How long the circuit stays open (seconds) |
 | `CircuitBreakerSamplingDurationSeconds` | int | `60` | Sampling window for measuring failures (seconds) |
 

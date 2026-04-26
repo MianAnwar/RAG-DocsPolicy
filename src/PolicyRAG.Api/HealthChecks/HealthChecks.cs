@@ -15,12 +15,12 @@ public class QdrantHealthCheck : IHealthCheck
     private readonly ILogger<QdrantHealthCheck> _logger;
 
     public QdrantHealthCheck(
+        QdrantClient client,
         IOptions<QdrantOptions> options,
         ILogger<QdrantHealthCheck> logger)
     {
-        var config = options.Value;
-        _client = new QdrantClient(config.Host, config.Port);
-        _collectionName = config.CollectionName;
+        _client = client;
+        _collectionName = options.Value.CollectionName;
         _logger = logger;
     }
 
@@ -51,9 +51,10 @@ public class QdrantHealthCheck : IHealthCheck
                     data["points_count"] = collectionInfo.PointsCount;
                     data["status"] = collectionInfo.Status.ToString();
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Collection info is optional
+                    // Collection info is optional — failure here does not affect connectivity
+                    _logger.LogDebug(ex, "Could not retrieve info for collection {CollectionName}", _collectionName);
                 }
             }
 
@@ -90,11 +91,11 @@ public class OpenAIHealthCheck : IHealthCheck
     public OpenAIHealthCheck(
         IConfiguration configuration,
         ILogger<OpenAIHealthCheck> logger,
-        IHttpClientFactory? httpClientFactory = null)
+        IHttpClientFactory httpClientFactory)
     {
         _configuration = configuration;
         _logger = logger;
-        _httpClient = httpClientFactory?.CreateClient("OpenAIHealth") ?? new HttpClient();
+        _httpClient = httpClientFactory.CreateClient("OpenAIHealth");
     }
 
     public async Task<HealthCheckResult> CheckHealthAsync(
@@ -126,8 +127,7 @@ public class OpenAIHealthCheck : IHealthCheck
                 { "chat_model", _configuration["OpenAI:ChatModel"] ?? "gpt-4o" }
             };
 
-            // Optional: Make a lightweight API call to verify connectivity
-            // Note: This costs tokens, so we just verify configuration by default
+            // Makes a lightweight call to GET /v1/models to verify connectivity and API key validity.
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.openai.com/v1/models");
@@ -207,7 +207,7 @@ public class DocumentRepositoryHealthCheck : IHealthCheck
             var repository = scope.ServiceProvider.GetRequiredService<Interfaces.IDocumentRepository>();
             
             // Try to get document count
-            var (documents, totalCount) = await repository.GetDocumentsAsync(1, 1);
+            var (_, totalCount) = await repository.GetDocumentsAsync(1, 1);
             
             var data = new Dictionary<string, object>
             {

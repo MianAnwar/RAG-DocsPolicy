@@ -1,9 +1,11 @@
+using Microsoft.Extensions.Options;
 using PolicyRAG.Api.Configuration;
 using PolicyRAG.Api.HealthChecks;
 using PolicyRAG.Api.Interfaces;
 using PolicyRAG.Api.Resilience;
 using PolicyRAG.Api.Services;
 using PolicyRAG.Api.Services.Parsers;
+using Qdrant.Client;
 using Serilog;
 
 // Configure Serilog
@@ -73,6 +75,11 @@ try
     builder.Services.AddSingleton<IEmbeddingService, OpenAIEmbeddingService>();
 
     // Register vector store service
+    builder.Services.AddSingleton<QdrantClient>(sp =>
+    {
+        var config = sp.GetRequiredService<IOptions<QdrantOptions>>().Value;
+        return new QdrantClient(config.Host, config.Port);
+    });
     builder.Services.AddSingleton<IVectorStoreService, QdrantVectorStoreService>();
 
     // Register retrieval service
@@ -128,6 +135,11 @@ try
 
     // Mark startup as complete
     var startupHealthCheck = app.Services.GetService<StartupHealthCheck>();
+
+    // Initialize Qdrant collection (creates it if it doesn't exist)
+    var vectorStore = app.Services.GetRequiredService<IVectorStoreService>();
+    await vectorStore.InitializeCollectionAsync();
+
     if (startupHealthCheck != null)
     {
         startupHealthCheck.IsReady = true;

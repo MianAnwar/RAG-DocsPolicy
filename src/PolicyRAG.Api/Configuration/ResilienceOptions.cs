@@ -28,9 +28,10 @@ public class ResilienceOptions
     public int TimeoutSeconds { get; set; } = 30;
 
     /// <summary>
-    /// Number of consecutive failures before circuit breaker opens
+    /// Minimum number of actions in the sampling window before the failure ratio is evaluated.
+    /// Prevents the circuit breaker from opening on too few samples.
     /// </summary>
-    public int CircuitBreakerFailureThreshold { get; set; } = 5;
+    public int CircuitBreakerMinimumThroughput { get; set; } = 10;
 
     /// <summary>
     /// Duration in seconds the circuit breaker stays open before allowing test requests

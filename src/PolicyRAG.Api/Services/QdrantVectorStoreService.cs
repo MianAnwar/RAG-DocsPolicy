@@ -19,14 +19,15 @@ public class QdrantVectorStoreService : IVectorStoreService
     private readonly ResiliencePipeline _resiliencePipeline;
 
     public QdrantVectorStoreService(
+        QdrantClient client,
         IOptions<QdrantOptions> options,
         ILogger<QdrantVectorStoreService> logger,
         QdrantResiliencePipeline? resiliencePipeline = null)
     {
         var config = options.Value;
+        _client = client;
         _collectionName = config.CollectionName;
         _vectorSize = (ulong)config.VectorSize;
-        _client = new QdrantClient(config.Host, config.Port);
         _logger = logger;
         _resiliencePipeline = resiliencePipeline?.Pipeline ?? ResiliencePipeline.Empty;
     }
