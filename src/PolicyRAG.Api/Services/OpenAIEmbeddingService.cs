@@ -1,5 +1,7 @@
 using OpenAI.Embeddings;
 using PolicyRAG.Api.Interfaces;
+using PolicyRAG.Api.Resilience;
+using Polly;
 
 namespace PolicyRAG.Api.Services;
 
@@ -7,15 +9,20 @@ public class OpenAIEmbeddingService : IEmbeddingService
 {
     private readonly EmbeddingClient _client;
     private readonly ILogger<OpenAIEmbeddingService> _logger;
+    private readonly ResiliencePipeline _resiliencePipeline;
     private readonly int _batchSize = 100;
     private readonly int _rateLimitDelayMs = 100;
 
-    public OpenAIEmbeddingService(IConfiguration configuration, ILogger<OpenAIEmbeddingService> logger)
+    public OpenAIEmbeddingService(
+        IConfiguration configuration, 
+        ILogger<OpenAIEmbeddingService> logger,
+        OpenAIResiliencePipeline? resiliencePipeline = null)
     {
         var apiKey = configuration["OpenAI:ApiKey"];
         var model = configuration["OpenAI:EmbeddingModel"] ?? "text-embedding-3-small";
         _client = new EmbeddingClient(model, apiKey);
         _logger = logger;
+        _resiliencePipeline = resiliencePipeline?.Pipeline ?? ResiliencePipeline.Empty;
     }
 
     public async Task<float[]> GenerateEmbeddingAsync(string text)
@@ -28,8 +35,21 @@ public class OpenAIEmbeddingService : IEmbeddingService
 
         try
         {
-            var embedding = await _client.GenerateEmbeddingAsync(text);
-            return embedding.Value.ToFloats().ToArray();
+            return await _resiliencePipeline.ExecuteAsync(async ct =>
+            {
+                var embedding = await _client.GenerateEmbeddingAsync(text, cancellationToken: ct);
+                return embedding.Value.ToFloats().ToArray();
+            });
+        }
+        catch (Polly.CircuitBreaker.BrokenCircuitException)
+        {
+            _logger.LogError("OpenAI circuit breaker is open - embedding service unavailable");
+            throw new InvalidOperationException("Embedding service is temporarily unavailable. Please try again later.");
+        }
+        catch (Polly.Timeout.TimeoutRejectedException)
+        {
+            _logger.LogError("OpenAI embedding request timed out");
+            throw new TimeoutException("Embedding generation timed out. Please try again.");
         }
         catch (Exception ex)
         {
@@ -65,13 +85,28 @@ public class OpenAIEmbeddingService : IEmbeddingService
                 _logger.LogDebug("Processing batch {BatchNumber}/{TotalBatches} with {Count} texts", 
                     batchNumber, totalBatches, batch.Count);
 
-                var embeddings = await _client.GenerateEmbeddingsAsync(batch);
-                results.AddRange(embeddings.Value.Select(e => e.ToFloats().ToArray()));
-
+                // Use resilience pipeline for batch embedding
+                var batchEmbeddings = await _resiliencePipeline.ExecuteAsync(async ct =>
+                {
+                    var embeddings = await _client.GenerateEmbeddingsAsync(batch, cancellationToken: ct);
+                    return embeddings.Value.Select(e => e.ToFloats().ToArray()).ToList();
+                });
+                
+                results.AddRange(batchEmbeddings);
                 processed += batch.Count;
                 progress?.Report(processed);
 
                 _logger.LogDebug("Completed batch {BatchNumber}/{TotalBatches}", batchNumber, totalBatches);
+            }
+            catch (Polly.CircuitBreaker.BrokenCircuitException)
+            {
+                _logger.LogError("OpenAI circuit breaker is open - aborting batch embedding at batch {BatchNumber}", batchNumber);
+                throw new InvalidOperationException("Embedding service is temporarily unavailable. Please try again later.");
+            }
+            catch (Polly.Timeout.TimeoutRejectedException)
+            {
+                _logger.LogError("Batch {BatchNumber} timed out", batchNumber);
+                throw new TimeoutException($"Embedding generation timed out at batch {batchNumber}. Please try again.");
             }
             catch (Exception ex) when (IsRateLimitError(ex))
             {

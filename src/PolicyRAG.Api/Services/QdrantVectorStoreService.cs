@@ -2,6 +2,8 @@ using Microsoft.Extensions.Options;
 using PolicyRAG.Api.Configuration;
 using PolicyRAG.Api.Interfaces;
 using PolicyRAG.Api.Models;
+using PolicyRAG.Api.Resilience;
+using Polly;
 using Qdrant.Client;
 using Qdrant.Client.Grpc;
 using static Qdrant.Client.Grpc.Conditions;
@@ -14,56 +16,71 @@ public class QdrantVectorStoreService : IVectorStoreService
     private readonly string _collectionName;
     private readonly ulong _vectorSize;
     private readonly ILogger<QdrantVectorStoreService> _logger;
+    private readonly ResiliencePipeline _resiliencePipeline;
 
     public QdrantVectorStoreService(
+        QdrantClient client,
         IOptions<QdrantOptions> options,
-        ILogger<QdrantVectorStoreService> logger)
+        ILogger<QdrantVectorStoreService> logger,
+        QdrantResiliencePipeline? resiliencePipeline = null)
     {
         var config = options.Value;
+        _client = client;
         _collectionName = config.CollectionName;
         _vectorSize = (ulong)config.VectorSize;
-        _client = new QdrantClient(config.Host, config.Port);
         _logger = logger;
+        _resiliencePipeline = resiliencePipeline?.Pipeline ?? ResiliencePipeline.Empty;
     }
 
     public async Task InitializeCollectionAsync()
     {
         try
         {
-            var collections = await _client.ListCollectionsAsync();
-            
-            if (!collections.Contains(_collectionName))
+            await _resiliencePipeline.ExecuteAsync(async ct =>
             {
-                _logger.LogInformation("Creating collection: {CollectionName}", _collectionName);
+                var collections = await _client.ListCollectionsAsync(ct);
                 
-                await _client.CreateCollectionAsync(_collectionName, new VectorParams
+                if (!collections.Contains(_collectionName))
                 {
-                    Size = _vectorSize,
-                    Distance = Distance.Cosine
-                });
-
-                // Create payload indexes for filtering
-                await _client.CreatePayloadIndexAsync(
-                    _collectionName, 
-                    "document_id", 
-                    PayloadSchemaType.Keyword);
+                    _logger.LogInformation("Creating collection: {CollectionName}", _collectionName);
                     
-                await _client.CreatePayloadIndexAsync(
-                    _collectionName, 
-                    "department", 
-                    PayloadSchemaType.Keyword);
-                    
-                await _client.CreatePayloadIndexAsync(
-                    _collectionName, 
-                    "upload_date", 
-                    PayloadSchemaType.Datetime);
+                    await _client.CreateCollectionAsync(_collectionName, new VectorParams
+                    {
+                        Size = _vectorSize,
+                        Distance = Distance.Cosine
+                    }, cancellationToken: ct);
 
-                _logger.LogInformation("Collection created successfully: {CollectionName}", _collectionName);
-            }
-            else
-            {
-                _logger.LogInformation("Collection already exists: {CollectionName}", _collectionName);
-            }
+                    // Create payload indexes for filtering
+                    await _client.CreatePayloadIndexAsync(
+                        _collectionName, 
+                        "document_id", 
+                        PayloadSchemaType.Keyword,
+                        cancellationToken: ct);
+                        
+                    await _client.CreatePayloadIndexAsync(
+                        _collectionName, 
+                        "department", 
+                        PayloadSchemaType.Keyword,
+                        cancellationToken: ct);
+                        
+                    await _client.CreatePayloadIndexAsync(
+                        _collectionName, 
+                        "upload_date", 
+                        PayloadSchemaType.Datetime,
+                        cancellationToken: ct);
+
+                    _logger.LogInformation("Collection created successfully: {CollectionName}", _collectionName);
+                }
+                else
+                {
+                    _logger.LogInformation("Collection already exists: {CollectionName}", _collectionName);
+                }
+            });
+        }
+        catch (Polly.CircuitBreaker.BrokenCircuitException)
+        {
+            _logger.LogError("Qdrant circuit breaker is open - cannot initialize collection");
+            throw new InvalidOperationException("Vector database is temporarily unavailable. Please try again later.");
         }
         catch (Exception ex)
         {
@@ -115,11 +132,19 @@ public class QdrantVectorStoreService : IVectorStoreService
                 _logger.LogDebug("Upserting batch {BatchNumber}/{TotalBatches} with {Count} points", 
                     batchNumber, totalBatches, batch.Count);
                 
-                await _client.UpsertAsync(_collectionName, batch);
+                await _resiliencePipeline.ExecuteAsync(async ct =>
+                {
+                    await _client.UpsertAsync(_collectionName, batch, cancellationToken: ct);
+                });
             }
 
             _logger.LogInformation("Successfully upserted {Count} chunks to collection: {Collection}", 
                 points.Count, _collectionName);
+        }
+        catch (Polly.CircuitBreaker.BrokenCircuitException)
+        {
+            _logger.LogError("Qdrant circuit breaker is open - cannot upsert chunks");
+            throw new InvalidOperationException("Vector database is temporarily unavailable. Please try again later.");
         }
         catch (Exception ex)
         {
@@ -134,11 +159,20 @@ public class QdrantVectorStoreService : IVectorStoreService
         {
             _logger.LogInformation("Deleting chunks for document: {DocumentId}", documentId);
             
-            await _client.DeleteAsync(
-                _collectionName,
-                MatchKeyword("document_id", documentId.ToString()));
+            await _resiliencePipeline.ExecuteAsync(async ct =>
+            {
+                await _client.DeleteAsync(
+                    _collectionName,
+                    MatchKeyword("document_id", documentId.ToString()),
+                    cancellationToken: ct);
+            });
 
             _logger.LogInformation("Successfully deleted chunks for document: {DocumentId}", documentId);
+        }
+        catch (Polly.CircuitBreaker.BrokenCircuitException)
+        {
+            _logger.LogError("Qdrant circuit breaker is open - cannot delete document chunks");
+            throw new InvalidOperationException("Vector database is temporarily unavailable. Please try again later.");
         }
         catch (Exception ex)
         {
@@ -176,12 +210,16 @@ public class QdrantVectorStoreService : IVectorStoreService
             _logger.LogDebug("Searching collection: {Collection} with TopK={TopK}, CandidateLimit={CandidateLimit}, UseMmr={UseMmr}", 
                 _collectionName, options.TopK, candidateLimit, options.UseMmr);
             
-            var searchResults = await _client.SearchAsync(
-                _collectionName,
-                queryVector,
-                filter: filter,
-                limit: (ulong)candidateLimit,
-                scoreThreshold: options.ScoreThreshold);
+            var searchResults = await _resiliencePipeline.ExecuteAsync(async ct =>
+            {
+                return await _client.SearchAsync(
+                    _collectionName,
+                    queryVector,
+                    filter: filter,
+                    limit: (ulong)candidateLimit,
+                    scoreThreshold: options.ScoreThreshold,
+                    cancellationToken: ct);
+            });
 
             var results = searchResults.Select(r => new SearchResult
             {
@@ -206,6 +244,16 @@ public class QdrantVectorStoreService : IVectorStoreService
             _logger.LogInformation("Returning {Count} final results", finalResults.Count);
 
             return finalResults;
+        }
+        catch (Polly.CircuitBreaker.BrokenCircuitException)
+        {
+            _logger.LogError("Qdrant circuit breaker is open - search unavailable");
+            throw new InvalidOperationException("Vector search is temporarily unavailable. Please try again later.");
+        }
+        catch (Polly.Timeout.TimeoutRejectedException)
+        {
+            _logger.LogError("Qdrant search request timed out");
+            throw new TimeoutException("Search request timed out. Please try again.");
         }
         catch (Exception ex)
         {
